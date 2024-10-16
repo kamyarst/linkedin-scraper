@@ -45,9 +45,10 @@ class GoogleSheet
         [
         row[:id],
         row[:title],
-        Time.now.strftime('%Y-%m-%d %H:%M'),
         row[:company],
         row[:location],
+        Time.now.strftime('%Y-%m-%d %H:%M'),
+        row[:date],
         "https://www.linkedin.com/jobs/view/#{row[:id]}"
         ]
       ]

@@ -25,7 +25,8 @@ includes = [
 
 excludes = [
   "senior",
-  "lead"
+  "lead",
+  "principal"
 ]
 
 grabber.get(queries, includes, excludes)

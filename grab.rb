@@ -102,15 +102,22 @@ class Grabber
         end
 
         if contains_match && excluded
+          li.click
+
+          job_detail_element = driver.find_element(:class_name, "job-details-jobs-unified-top-card__primary-description-container")
+          wait.until { job_detail_element.displayed? }
+
+          date = job_detail_element.find_elements(:class_name, "tvm__text")[2]
+          job[:date] = date.text
+
           GoogleSheet.new.add_to_sheet_if_needed(job)
         else
-          puts "⏭️ not matched"
+          puts "⏭️ Not matched"
         end
         
         puts '-----'
 
-        # sleep 3
-        driver.execute_script("arguments[0].scrollBy(0, 200);", scrollable)  # Scroll down 200 pixels
+        driver.execute_script("arguments[0].scrollBy(0, #{li.size.height});", scrollable)  # Scroll down 200 pixels
       end
 
       begin
