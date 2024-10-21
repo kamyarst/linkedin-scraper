@@ -9,6 +9,3 @@ gem 'google-api-client'
 
 # Selenium WebDriver (for browser automation)
 gem 'selenium-webdriver'
-
-# Optionally, you can add other gems like dotenv for environment variables
-gem 'dotenv'

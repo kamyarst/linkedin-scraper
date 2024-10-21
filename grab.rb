@@ -1,7 +1,33 @@
 require 'selenium-webdriver'
+require 'json'
 require_relative 'google_sheet'
 
 class Grabber
+
+  attr_reader :config
+  
+  # Initializer to get the path and save config
+  def initialize(file_path)
+    @file_path = file_path
+    load_config
+  end
+
+  private
+
+  # Method to load and parse JSON file
+  def load_config
+    if File.exist?(@file_path)
+      begin
+        @config = JSON.parse(File.read(@file_path))
+      rescue JSON::ParserError => e
+        puts "Failed to parse JSON: #{e.message}"
+        @config = {}
+      end
+    else
+      puts "File not found: #{@file_path}"
+      @config = {}
+    end
+  end
 
   def init_driver
     # Create a new instance of the Chrome driver
@@ -15,11 +41,15 @@ class Grabber
     driver.manage.timeouts.implicit_wait = 15
     driver.manage.window.maximize
 
+    driver
+  end
+
+  def set_session_cookie(driver)
     driver.navigate.to "https://www.linkedin.com"
 
     cookie = {
       name: 'li_at',  # The name of the cookie
-      value: ENV['LINKEDIN_TOKEN'],  
+      value: config['linkedin_token'],  
       path: '/',            
       domain: '.www.linkedin.com', # Optional: domain of the cookie (must match the current domain)
       secure: true,         # Optional: set to true if it's a secure cookie
@@ -29,13 +59,13 @@ class Grabber
 
     # Add the cookie to the browser session
     driver.manage.add_cookie(cookie)
-
-    driver
   end
 
   public def get(queries, includes, excludes)
     driver = init_driver
     wait = Selenium::WebDriver::Wait.new(:timeout => 5)
+
+    set_session_cookie(driver)
 
     queries.each do |query|
       fetch_data(query, includes, excludes, driver, wait)
@@ -54,13 +84,21 @@ class Grabber
     end
 
     keywords = query.gsub(' ', '%20')
-    url = "https://www.linkedin.com/jobs/search/?geoId=101165590&keywords=#{keywords}&f_TPR=r86400"
+    url = "https://www.linkedin.com/jobs/search/?geoId=101165590&keywords=#{keywords}&f_TPR=#{config['linkedin_date']}"
     # &sortBy=DD
     puts "🔗 #{url}"
 
     # Navigate to LinkedIn
     driver.navigate.to url
-    sleep 3
+
+    begin
+      sleep 3
+      puts "looking"
+      driver.find_element(:xpath, '//button[@data-test-global-alert-action="1"]').click
+      puts "rejected"
+    rescue
+      puts "not found"
+    end
 
     page = 0
     has_next_page = true
@@ -110,14 +148,14 @@ class Grabber
           date = job_detail_element.find_elements(:class_name, "tvm__text")[2]
           job[:date] = date.text
 
-          GoogleSheet.new.add_to_sheet_if_needed(job)
+          GoogleSheet.new(@file_path).add_to_sheet_if_needed(job)
         else
           puts "⏭️ Not matched"
         end
         
         puts '-----'
 
-        driver.execute_script("arguments[0].scrollBy(0, #{li.size.height});", scrollable)  # Scroll down 200 pixels
+        driver.execute_script("arguments[0].scrollBy(0, #{row.size.height});", scrollable)  # Scroll down 200 pixels
       end
 
       begin
@@ -131,7 +169,7 @@ class Grabber
     end
   end
 
-  public def login()
+  public def login
   
     driver = init_driver
     wait = Selenium::WebDriver::Wait.new(:timeout => 5)
@@ -140,14 +178,16 @@ class Grabber
 
     email_field = driver.find_element(:id, "username")
     wait.until { email_field.displayed? }
-    email_field.send_keys(ENV['LINKEDIN_USER'])
+    email_field.send_keys(config['linkedin_user'])
 
     pass_field = driver.find_element(:id, "password")
-    pass_field.send_keys(ENV['LINKEDIN_PASS'])
+    pass_field.send_keys(config['linkedin_pass'])
     pass_field.send_keys(:enter)
 
-    token = driver.manage.cookie_named('li_at')
-    ENV['LINKEDIN_TOKEN'] = token
+    sleep 2
 
+    token = driver.manage.cookie_named('li_at')[:value]
+    config['linkedin_token'] = token
+    File.write(@file_path, JSON.pretty_generate(@config))
   end
 end
