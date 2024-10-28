@@ -49,7 +49,7 @@ class Grabber
 
     cookie = {
       name: 'li_at',  # The name of the cookie
-      value: config['linkedin_token'],  
+      value: config['linkedin']['token'],  
       path: '/',            
       domain: '.www.linkedin.com', # Optional: domain of the cookie (must match the current domain)
       secure: true,         # Optional: set to true if it's a secure cookie
@@ -61,9 +61,12 @@ class Grabber
     driver.manage.add_cookie(cookie)
   end
 
-  public def get(queries, includes, excludes)
+  public def get()
     driver = init_driver
     wait = Selenium::WebDriver::Wait.new(:timeout => 5)
+    queries = config['search']['queries']
+    includes = config['search']['includes']
+    excludes = config['search']['excludes']
 
     set_session_cookie(driver)
 
@@ -84,7 +87,7 @@ class Grabber
     end
 
     keywords = query.gsub(' ', '%20')
-    url = "https://www.linkedin.com/jobs/search/?geoId=101165590&keywords=#{keywords}&f_TPR=#{config['linkedin_date']}"
+    url = "https://www.linkedin.com/jobs/search/?geoId=101165590&keywords=#{keywords}&f_TPR=#{config['linkedin']['date']}"
     # &sortBy=DD
     puts "🔗 #{url}"
 
@@ -148,7 +151,7 @@ class Grabber
           date = job_detail_element.find_elements(:class_name, "tvm__text")[2]
           job[:date] = date.text
 
-          GoogleSheet.new(@file_path).add_to_sheet_if_needed(job)
+          GoogleSheet.new(@file_path).add_to_sheet_if_needed(job, "LinkedIn")
         else
           puts "⏭️ Not matched"
         end
@@ -178,16 +181,16 @@ class Grabber
 
     email_field = driver.find_element(:id, "username")
     wait.until { email_field.displayed? }
-    email_field.send_keys(config['linkedin_user'])
+    email_field.send_keys(config['linkedin']['user'])
 
     pass_field = driver.find_element(:id, "password")
-    pass_field.send_keys(config['linkedin_pass'])
+    pass_field.send_keys(config['linkedin']['pass'])
     pass_field.send_keys(:enter)
 
     sleep 2
 
     token = driver.manage.cookie_named('li_at')[:value]
-    config['linkedin_token'] = token
+    config['linkedin']['token'] = token
     File.write(@file_path, JSON.pretty_generate(@config))
   end
 end

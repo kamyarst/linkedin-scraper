@@ -56,9 +56,9 @@ class GoogleSheet
   end
 
   # Append an error log to a specific sheet (tab) within the existing spreadsheet
-  def add_to_sheet(row, service)
+  def add_to_sheet(row, page, service)
 
-    range = "#{config['spreadsheet_page']}!A2"
+    range = "#{page}!A2"
     value_range_object = Google::Apis::SheetsV4::ValueRange.new(
       values: [
         [
@@ -74,28 +74,27 @@ class GoogleSheet
     )
     
     service.append_spreadsheet_value(
-      config['spreadsheet_id'],
+      config['spreadsheet']['id'],
       range,
       value_range_object,
       value_input_option: 'RAW'
     )
   end
 
-
-  public def add_to_sheet_if_needed(row)
+  public def add_to_sheet_if_needed(row, page)
     sleep 1 # to avoid limit
     
     service = initialize_service
-    range = "#{config['spreadsheet_page']}!A:A" # Define the range to check (first column in #{ENV['SPREADSHEET_PAGE']})
+    range = "#{page}!A:A" # Define the range to check (first column in #{ENV['SPREADSHEET_PAGE']})
 
     # Fetch all values from the first column
-    response = service.get_spreadsheet_values(config['spreadsheet_id'], range)
+    response = service.get_spreadsheet_values(config['spreadsheet']['id'], range)
 
     # Check if the ID exists in the first column
     if response.values.flatten.include?(row[:id].to_s)
       puts "⏭️ Already imported"
     else
-      add_to_sheet(row, service)
+      add_to_sheet(row, page, service)
       puts "✅ Added"
     end
   end

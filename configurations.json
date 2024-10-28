@@ -1,0 +1,24 @@
+{
+    "search": {
+        "queries": [
+            "ios developer",
+            "swift engineer"
+        ],
+        "includes": [
+            "ios",
+            "swift"
+        ],
+        "excludes": [
+            "junior",
+            "intern"
+        ]
+    },
+    "linkedin": {
+        "token": "",
+        "user": "hello@gmail.com",
+        "pass": "MyPass",
+        "date": "r2592000"
+    },
+    "spreadsheet": {
+        "id": "SPREADSHEET_ID"
+    }
