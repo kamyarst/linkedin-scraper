@@ -1,84 +1,99 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Function to print an error message and exit
+function error_exit {
+  echo "Error: $1" >&2
+  exit 1
+}
 
 # Function to check if a command exists
 function command_exists {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Determine OS type
+# Detect OS type
 OS_TYPE="unknown"
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  OS_TYPE="mac"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  OS_TYPE="linux"
-elif [[ "$OSTYPE" == "msys"* ]] || [[ "$OSTYPE" == "cygwin"* ]] || [[ "$OSTYPE" == "win32"* ]]; then
-  OS_TYPE="windows"
-else
-  echo "Unsupported OS type: $OSTYPE"
-  exit 1
-fi
+case "$OSTYPE" in
+  darwin*)  OS_TYPE="mac" ;;
+  linux*)   OS_TYPE="linux" ;;
+  msys*|cygwin*|win32*) OS_TYPE="windows" ;;
+  *) error_exit "Unsupported OS type: $OSTYPE" ;;
+esac
 
 echo "Running on: $OS_TYPE"
 
-# Mac specific: Check and install Homebrew
-if [[ "$OS_TYPE" == "mac" ]]; then
-  if ! command_exists brew; then
-    echo "Homebrew is not installed. Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    # Add Homebrew to PATH
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.bash_profile
+### Installers/Package managers ###
+
+# Mac: Homebrew
+if [[ "$OS_TYPE" == "mac" ]] && ! command_exists brew; then
+  echo "Homebrew not found. Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || error_exit "Failed to install Homebrew."
+  # Add Homebrew to PATH for this script runtime
+  if [[ -f "/opt/homebrew/bin/brew" ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
-  fi
-fi
-
-# Windows specific: Check and install Chocolatey
-if [[ "$OS_TYPE" == "windows" ]]; then
-  if ! command_exists choco; then
-    echo "Chocolatey is not installed. Installing Chocolatey..."
-    powershell -NoProfile -ExecutionPolicy Bypass -Command \
-    "Set-ExecutionPolicy Bypass -Scope Process -Force; \
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; \
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
-    # Refresh environment variables
-    export PATH="$PATH:/c/ProgramData/chocolatey/bin"
-  fi
-fi
-
-# Check if gem is installed
-if ! command_exists gem; then
-  echo "RubyGems (gem) is not installed."
-
-  if [[ "$OS_TYPE" == "mac" ]]; then
-    echo "Installing Ruby via Homebrew..."
-    brew install ruby
-    # Add Ruby to PATH
-    echo 'export PATH="/usr/local/opt/ruby/bin:$PATH"' >> ~/.bash_profile
-    export PATH="/usr/local/opt/ruby/bin:$PATH"
-  elif [[ "$OS_TYPE" == "windows" ]]; then
-    echo "Installing Ruby via Chocolatey..."
-    choco install ruby -y
-    # Refresh environment variables
-    export PATH="$PATH:/c/tools/ruby27/bin"
+  elif [[ -f "/usr/local/bin/brew" ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
   else
-    echo "Please install Ruby manually."
-    exit 1
+    error_exit "Homebrew installed but not found in expected locations."
   fi
 fi
 
-# Check again if gem is installed
-if ! command_exists gem; then
-  echo "RubyGems (gem) is still not installed. Exiting."
-  exit 1
+# Windows: Chocolatey
+if [[ "$OS_TYPE" == "windows" ]] && ! command_exists choco; then
+  echo "Chocolatey not found. Installing Chocolatey..."
+  powershell -NoProfile -ExecutionPolicy Bypass -Command \
+  "Set-ExecutionPolicy Bypass -Scope Process -Force; \
+   [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; \
+   iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))" || error_exit "Failed to install Chocolatey."
+  # Add Chocolatey to PATH for this script runtime
+  export PATH="$PATH:/c/ProgramData/chocolatey/bin"
 fi
 
-# Check if bundler is installed
-if ! gem list -i bundler >/dev/null 2>&1; then
-  echo "Bundler is not installed. Installing Bundler..."
-  gem install bundler
+### Node.js and npm installation ###
+
+if ! command_exists node || ! command_exists npm; then
+  echo "Node.js or npm not found. Installing Node.js..."
+
+  case "$OS_TYPE" in
+    mac)
+      brew install node || error_exit "Failed to install Node.js via Homebrew."
+      ;;
+    linux)
+      # Using apt for Debian/Ubuntu based systems
+      if command_exists apt; then
+        sudo apt-get update -y
+        sudo apt-get install -y nodejs npm || error_exit "Failed to install Node.js and npm via apt."
+      else
+        error_exit "No supported package manager found. Please install Node.js manually."
+      fi
+      ;;
+    windows)
+      choco install -y nodejs || error_exit "Failed to install Node.js via Chocolatey."
+      # Add Node.js to PATH for this script runtime if needed (usually not needed on Windows)
+      ;;
+  esac
 fi
 
-# Run bundle install
-echo "Running 'bundle install'..."
-bundle install
+# Check again if node and npm are installed
+if ! command_exists node || ! command_exists npm; then
+  error_exit "Node.js or npm is still not installed. Please install manually."
+fi
 
-ruby main.rb
+echo "Node.js version: $(node -v)"
+echo "npm version: $(npm -v)"
+
+### Install project dependencies ###
+
+if [ ! -f package.json ]; then
+  error_exit "No package.json found. Make sure you're running this script from the project directory."
+fi
+
+echo "Installing project dependencies..."
+npm install || error_exit "npm install failed."
+
+### Run the project ###
+
+echo "Starting the project..."
+node main.js || error_exit "Failed to run main.js."

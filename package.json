@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "fs-extra": "^11.2.0",
+    "googleapis": "^144.0.0",
+    "selenium-webdriver": "^4.27.0"
+  }
+}
