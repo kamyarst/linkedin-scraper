@@ -1,28 +1,39 @@
-const fs = require('fs');
-const path = require('path');
-const Grabber = require('./grabber');
+const fs = require('fs').promises;
+const LinkedinScraper = require('./linkedinScraper');
+const IndeedScraper = require('./indeedScraper');
+const GoogleSheet = require('./googleSheet');
+const JobLogger = require('./jobLogger');
 
 (async () => {
-  const googleCredsPath = path.resolve(__dirname, 'credentials.json');
-  const configPath = path.resolve(__dirname, 'configurations.json');
-
-  // Check Google credentials file
-  if (!fs.existsSync(googleCredsPath)) {
-    throw new Error('Google Credentials file does not exist.');
-  }
   console.log("Google credential file is imported!");
 
-  // Check configuration file
-  if (!fs.existsSync(configPath)) {
-    throw new Error('Configurations file does not exist.');
+  try {
+    const rawData = await fs.readFile("./configurations.json", 'utf8');
+    const config = JSON.parse(rawData);
+    console.log("Configuration file is imported!");
+
+    const googleSheet = new GoogleSheet(config);
+    await googleSheet.init();
+
+    const logger = new JobLogger();
+
+    if (config.linkedin.enabled) {
+      const linkedin = new LinkedinScraper(config, googleSheet, logger);
+
+      // Login to fetch and update token
+      await linkedin.login();
+
+      //  Perform scraping and data retrieval
+      await linkedin.getJobs();
+    }
+
+    if (config.indeed.enabled) {
+      const indeed = new IndeedScraper(config, googleSheet, logger);
+      await indeed.getJobs();
+    }
+
+    logger.displayLog("Results:");
+  } catch (e) {
+    console.error(e.message);
   }
-  console.log("Configuration file is imported!");
-
-  const grabber = new Grabber(configPath);
-
-  // Login to fetch and update token
-  await grabber.login();
-
-  // Perform scraping and data retrieval
-  await grabber.getJobs();
 })();

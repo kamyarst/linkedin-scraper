@@ -3,24 +3,15 @@ const fs = require('fs').promises;
 const path = require('path');
 
 class GoogleSheet {
-  constructor(filePath) {
-    this.filePath = filePath;
-    this.config = {};
+
+  constructor(config) {
+    this.config = config;
   }
 
   async init() {
-    this.config = await this.loadConfig(this.filePath);
     this.service = await this.initializeService();
-  }
-
-  async loadConfig(filePath) {
-    try {
-      const rawData = await fs.readFile(filePath, 'utf8');
-      return JSON.parse(rawData);
-    } catch (e) {
-      console.error(`Failed to load config from ${filePath}: ${e.message}`);
-      return {};
-    }
+    await this.addSheetIfNotExists("LinkedIn");
+    await this.addSheetIfNotExists("Indeed");
   }
 
   async authorizeServiceAccount() {
@@ -95,8 +86,8 @@ class GoogleSheet {
         row.company,
         row.location,
         new Date().toISOString().replace('T', ' ').slice(0, 16),
-        row.date,
-        `https://www.linkedin.com/jobs/view/${row.id}`
+        row.date || "",
+        row.link
       ],
     ];
 
@@ -108,6 +99,44 @@ class GoogleSheet {
         values,
       },
     });
+  }
+
+  async addSheetIfNotExists(sheetName) {
+    const spreadsheetId = this.config.spreadsheet.id;
+    try {
+      // Step 1: Get all sheets in the spreadsheet
+      const response = await this.service.spreadsheets.get({
+        spreadsheetId,
+      });
+
+      const existingSheets = response.data.sheets.map(sheet => sheet.properties.title);
+
+      // Step 2: Check if the sheet already exists
+      if (existingSheets.includes(sheetName)) {
+        console.log(`Sheet "${sheetName}" already exists.`);
+        return;
+      }
+
+      // Step 3: Add the new sheet
+      await this.service.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: sheetName,
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      console.log(`Sheet "${sheetName}" created successfully.`);
+    } catch (error) {
+      console.error('Error managing sheets:', error);
+    }
   }
 }
 

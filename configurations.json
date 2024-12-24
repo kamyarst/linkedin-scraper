@@ -1,25 +1,30 @@
 {
     "search": {
-        "queries": [
-            "ios developer",
-            "swift engineer"
-        ],
-        "includes": [
-            "ios",
-            "swift"
-        ],
-        "excludes": [
-            "junior",
-            "intern"
-        ]
+      "queries": [
+        "QUERY1",
+        "QUERY2",
+        "QUERY3"
+      ],
+      "includes": [
+        "INCLUDE_KEYWORD1",
+        "INCLUDE_KEYWORD2"
+      ],
+      "excludes": [
+        "EXCLUDE_KEYWORD1",
+        "EXCLUDE_KEYWORD2"
+      ],
+      "date": "DAY" // DAY, WEEK, MONTH
     },
     "linkedin": {
-        "token": "",
-        "user": "hello@gmail.com",
-        "pass": "MyPass",
-        "date": "r2592000"
+      "enabled": true, // Set to true to enable LinkedIn integration
+      "token": "YOUR_LINKEDIN_API_TOKEN_HERE",
+      "user": "YOUR_EMAIL_HERE",
+      "pass": "YOUR_PASSWORD_HERE"
+    },
+    "indeed": {
+      "enabled": true // Set to false if Indeed integration is not needed
     },
     "spreadsheet": {
-        "id": "SPREADSHEET_ID"
+      "id": "YOUR_GOOGLE_SPREADSHEET_ID_HERE" // Replace with your Google Sheet ID
     }
-}
+  }
