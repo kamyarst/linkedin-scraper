@@ -21,7 +21,9 @@ const JobLogger = require('./jobLogger');
       const linkedin = new LinkedinScraper(config, googleSheet, logger);
 
       // Login to fetch and update token
-      await linkedin.login();
+      if (config.linkedin.login) {
+        await linkedin.login();
+      }
 
       //  Perform scraping and data retrieval
       await linkedin.getJobs();

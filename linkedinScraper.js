@@ -13,6 +13,7 @@ class LinkedinScraper {
   async initDriver() {
     const options = new chrome.Options();
     options.addArguments('--disable-cache');
+    options.addArguments('--disable-software-rasterizer');
     options.addArguments('--disk-cache-size=0');
     options.addArguments('--headless=new');
     options.addArguments("--disable-blink-features=AutomationControlled"); // Disable automation controls
@@ -22,6 +23,7 @@ class LinkedinScraper {
     options.addArguments('--no-sandbox'); // Bypass OS security model
     options.addArguments('--disable-gpu'); // Disable GPU acceleration
     options.addArguments('--remote-debugging-port=9222'); // Enable remote debugging
+    options.addArguments('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'); // Set consistent user agent
 
     // Remove WebDriver-specific identifiers
     options.excludeSwitches(['enable-automation']); // Prevent Chrome from enabling automation mode
@@ -36,26 +38,56 @@ class LinkedinScraper {
     const driver = await this.initDriver();
 
     try {
-      await driver.get('https://www.linkedin.com/login');
-      const emailField = await driver.wait(until.elementLocated(By.id('username')), 5000);
-      await emailField.sendKeys(this.config.linkedin.user);
+      if (await this.isValidSession(driver) == false) {
 
-      const passField = await driver.findElement(By.id('password'));
-      await passField.sendKeys(this.config.linkedin.pass);
-      await passField.sendKeys('\n'); // Enter
+        await driver.get('https://www.linkedin.com/login');
+        const emailField = await driver.wait(until.elementLocated(By.id('username')), 5000);
+        await emailField.sendKeys(this.config.linkedin.user);
 
-      await driver.sleep(2000);
+        const passField = await driver.findElement(By.id('password'));
+        await passField.sendKeys(this.config.linkedin.pass);
+        await passField.sendKeys('\n'); // Enter
 
-      // Retrieve updated cookie
-      const cookies = await driver.manage().getCookies();
-      const liAtCookie = cookies.find(c => c.name === 'li_at');
-      if (liAtCookie) {
-        this.config.linkedin.token = liAtCookie.value;
-        await fs.writeFile("./configurations.json", JSON.stringify(this.config, null, 2), 'utf8');
+        await driver.sleep(20000);
+
+        // Retrieve updated cookie
+        const cookies = await driver.manage().getCookies();
+        const liAtCookie = cookies.find(c => c.name === 'li_at');
+        if (liAtCookie) {
+          this.config.linkedin.token = liAtCookie.value;
+          await fs.writeFile("./kamy.json", JSON.stringify(this.config, null, 2), 'utf8');
+        }
       }
-
     } finally {
       await driver.quit();
+    }
+  }
+
+  async isValidSession(driver) {
+
+    try {
+      await driver.get('https://www.linkedin.com/');
+
+      const cookie = {
+        name: 'li_at',
+        value: this.config.linkedin.token,
+        path: '/',
+        domain: '.www.linkedin.com',
+        secure: true,
+        httpOnly: true,
+        expiry: Math.floor(Date.now() / 1000) + 60 * 60 * 60 // 60 hours from now
+      };
+
+      await driver.manage().addCookie(cookie);
+
+      await driver.get('https://www.linkedin.com/login');
+
+      const finalUrl = await driver.getCurrentUrl();
+      console.log(finalUrl);
+      return finalUrl.includes("feed");
+
+    } catch {
+      return false
     }
   }
 
