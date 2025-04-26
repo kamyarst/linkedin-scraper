@@ -55,7 +55,7 @@ class LinkedinScraper {
         const liAtCookie = cookies.find(c => c.name === 'li_at');
         if (liAtCookie) {
           this.config.linkedin.token = liAtCookie.value;
-          await fs.writeFile("./kamy.json", JSON.stringify(this.config, null, 2), 'utf8');
+          await fs.writeFile("./configurations.json", JSON.stringify(this.config, null, 2), 'utf8');
         }
       }
     } finally {
