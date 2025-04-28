@@ -92,23 +92,24 @@ class LinkedinScraper {
   }
 
   async getJobs() {
-
     const driver = await this.initDriver();
-    await this.setSessionCookie(driver);
+    try {
+      await this.setSessionCookie(driver);
 
-    const queries = this.config.search?.queries || [];
-    const includes = this.config.search?.includes || [];
-    const excludes = this.config.search?.excludes || [];
+      const queries = this.config.search?.queries || [];
+      const includes = this.config.search?.includes || [];
+      const excludes = this.config.search?.excludes || [];
 
-    for (const query of queries) {
-      try {
-        await this.fetchData(query, includes, excludes, driver);
-      } catch (error) {
-        console.log(error);
+      for (const query of queries) {
+        try {
+          await this.fetchData(query, includes, excludes, driver);
+        } catch (error) {
+          console.log(error);
+        }
       }
+    } finally {
+      await driver.quit();
     }
-
-    await driver.quit();
   }
 
   async fetchData(query, includes, excludes, driver) {

@@ -58,77 +58,78 @@ class IndeedScraper {
     const url = `https://uk.indeed.com/jobs?q=${keywords}&l=United+Kingdom${dateParam}`;
     console.log(`🔗 ${url}`);
 
-    await driver.get(url);
+    try {
+      await driver.get(url);
 
-    
+      let hasNextPage = true;
 
-    let hasNextPage = true;
+      while (hasNextPage) {
+        const jobsTableLocator = By.className('mosaic mosaic-provider-jobcards mosaic-provider-hydrated');
+        await driver.wait(until.elementLocated(jobsTableLocator), 10000);
+        const jobsTable = await driver.findElement(jobsTableLocator);
+        const jobRows = await jobsTable.findElements(By.xpath('./ul/li'));
 
-    while (hasNextPage) {
-      const jobsTableLocator = By.className('mosaic mosaic-provider-jobcards mosaic-provider-hydrated');
-      await driver.wait(until.elementLocated(jobsTableLocator), 10000);
-      const jobsTable = await driver.findElement(jobsTableLocator);
-      const jobRows = await jobsTable.findElements(By.xpath('./ul/li'));
+        for (const li of jobRows) {
+          try {
+            const row = await li.findElement(By.xpath(".//td[contains(@class, 'resultContent')]"));
+            const jobTitleElement = await row.findElement(By.css("a"));
+            const jobId = await jobTitleElement.getAttribute('data-jk');
 
-      for (const li of jobRows) {
-        try {
-          const row = await li.findElement(By.xpath(".//td[contains(@class, 'resultContent')]"));
-          const jobTitleElement = await row.findElement(By.css("a"));
-          const jobId = await jobTitleElement.getAttribute('data-jk');
+            const locationElement = await row.findElement(By.xpath(`.//div[@data-testid="text-location"]`));
+            const companyElement = await row.findElement(By.xpath(`.//span[@data-testid="company-name"]`));
+            await driver.wait(until.elementIsVisible(locationElement), 5000);
 
-          const locationElement = await row.findElement(By.xpath(`.//div[@data-testid="text-location"]`));
-          const companyElement = await row.findElement(By.xpath(`.//span[@data-testid="company-name"]`));
-          await driver.wait(until.elementIsVisible(locationElement), 5000);
+            const jobTitle = await jobTitleElement.getText();
+            const jobCompany = await companyElement.getText();
+            const jobLocation = await locationElement.getText();
 
-          const jobTitle = await jobTitleElement.getText();
-          const jobCompany = await companyElement.getText();
-          const jobLocation = await locationElement.getText();
+            const job = {
+              id: jobId,
+              title: jobTitle,
+              company: jobCompany,
+              location: jobLocation,
+              link: `https://uk.indeed.com/viewjob?jk=${jobId}`,
+              date: ""
+            };
 
-          const job = {
-            id: jobId,
-            title: jobTitle,
-            company: jobCompany,
-            location: jobLocation,
-            link: `https://uk.indeed.com/viewjob?jk=${jobId}`,
-            date: ""
-          };
+            console.log(job);
 
-          console.log(job);
+            const containsMatch = includes.some(term => jobTitle.toLowerCase().includes(term.toLowerCase()));
+            const notExcluded = excludes.every(term => !jobTitle.toLowerCase().includes(term.toLowerCase()));
 
-          const containsMatch = includes.some(term => jobTitle.toLowerCase().includes(term.toLowerCase()));
-          const notExcluded = excludes.every(term => !jobTitle.toLowerCase().includes(term.toLowerCase()));
-
-          if (containsMatch && notExcluded) {
-            await this.googleSheet.addToSheetIfNeeded(job, "Indeed");
-            this.logger.logIndeedJob();
-          } else {
-            console.log("⏭️ Not matched");
-            this.logger.logScanIndeedJob();
+            if (containsMatch && notExcluded) {
+              await this.googleSheet.addToSheetIfNeeded(job, "Indeed");
+              this.logger.logIndeedJob();
+            } else {
+              console.log("⏭️ Not matched");
+              this.logger.logScanIndeedJob();
+            }
+          } catch (error) {
+            console.error(error);
           }
-        } catch (error) {
-          console.error(error);
+          console.log('-----');
+
+          // Scroll down to load more jobs
+          const { height } = (await li.getRect());
+
+          await driver.actions()
+            .scroll(0, 0, 0, height)
+            .perform();
         }
-        console.log('-----');
 
-        // Scroll down to load more jobs
-        const { height } = (await li.getRect());
-
-        await driver.actions()
-          .scroll(0, 0, 0, height)
-          .perform();
+        // Try to go to next page
+        try {
+          const nextPageButton = await driver.findElement(By.xpath(`//a[@data-testid="pagination-page-next"]`));
+          await nextPageButton.click();
+        } catch (err) {
+          hasNextPage = false;
+        }
       }
-
-      // Try to go to next page
-      try {
-        const nextPageButton = await driver.findElement(By.xpath(`//a[@data-testid="pagination-page-next"]`));
-        await nextPageButton.click();
-      } catch (err) {
-        hasNextPage = false;
-      }
+    } catch (error) {
+      console.error('Error during scraping:', error);
+      throw error;
     }
   }
-
-
 
   async getDate(dateType) {
     if (dateType == "MONTH") {
