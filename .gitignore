@@ -2,3 +2,4 @@
 *.DS_Store
 credentials.json
 node_modules
+configurations.json

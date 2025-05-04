@@ -1,8 +1,12 @@
 {
+   "main": "index.js",
    "dependencies": {
       "fs-extra": "^11.2.0",
       "googleapis": "^144.0.0",
       "node-fetch": "^2.7.0",
       "selenium-webdriver": "^4.27.0"
+   },
+   "scripts": {
+      "start": "node index.js"
    }
 }

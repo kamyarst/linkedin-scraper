@@ -133,10 +133,29 @@ class GoogleSheet {
         },
       });
 
+      await this.createHeader(sheetName);
+
       console.log(`Sheet "${sheetName}" created successfully.`);
     } catch (error) {
       console.error('Error managing sheets:', error);
     }
+  }
+
+  async createHeader(sheetName) {
+    const spreadsheetId = this.config.spreadsheet.id;
+    const range = `${sheetName}!A1:G1`;
+    const values = [
+      ['ID', 'Title', 'Company', 'Location', 'Created At', 'Date', 'Link']
+    ];
+
+    await this.service.spreadsheets.values.append({
+      spreadsheetId,
+      range,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values,
+      },
+    });
   }
 }
 

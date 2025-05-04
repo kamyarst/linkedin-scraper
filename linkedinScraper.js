@@ -17,19 +17,40 @@ class LinkedinScraper {
     options.addArguments('--disk-cache-size=0');
     options.addArguments('--headless=new');
     options.addArguments("--disable-blink-features=AutomationControlled"); // Disable automation controls
-    options.addArguments('--disable-blink-features=AutomationControlled'); // Prevent "AutomationControlled" detection
     options.addArguments('--disable-infobars'); // Disable infobars indicating automation
     options.addArguments('--disable-dev-shm-usage'); // Overcome limited resource issues
     options.addArguments('--no-sandbox'); // Bypass OS security model
     options.addArguments('--disable-gpu'); // Disable GPU acceleration
     options.addArguments('--remote-debugging-port=9222'); // Enable remote debugging
     options.addArguments('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'); // Set consistent user agent
+    
+    // Additional options to better mimic real browser behavior
+    options.addArguments('--window-size=1920,1080');
+    options.addArguments('--start-maximized');
+    options.addArguments('--disable-extensions');
+    options.addArguments('--lang=en-US,en;q=0.9');
+    options.addArguments('--disable-web-security');
+    
+    // Set CDP chrome properties to bypass detection
+    options.addArguments("--disable-features=IsolateOrigins,site-per-process");
+    
+    // Set additional preferences
+    options.setUserPreferences({
+      'credentials_enable_service': false,
+      'profile.password_manager_enabled': false,
+      'useAutomationExtension': false,
+      'plugins.always_open_pdf_externally': true
+    });
 
     // Remove WebDriver-specific identifiers
     options.excludeSwitches(['enable-automation']); // Prevent Chrome from enabling automation mode
     options.setUserPreferences({ 'useAutomationExtension': false });
 
     const driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
+    
+    // Override navigator.webdriver property to avoid detection
+    await driver.executeScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
+    
     await driver.manage().window().maximize();
     return driver;
   }
@@ -64,7 +85,6 @@ class LinkedinScraper {
   }
 
   async isValidSession(driver) {
-
     try {
       await driver.get('https://www.linkedin.com/');
 
@@ -114,12 +134,13 @@ class LinkedinScraper {
 
   async fetchData(query, includes, excludes, driver) {
     const dateParam = await this.getDate(this.config.search.date);
+    const location = encodeURIComponent(this.config.search.location);
     const keywords = encodeURIComponent(query);
-    const url = `https://www.linkedin.com/jobs/search/?geoId=101165590&keywords=${keywords}${dateParam}`;
+    const url = `https://www.linkedin.com/jobs/search/?location=${location}&keywords=${keywords}${dateParam}`;
     console.log(`🔗 ${url}`);
 
     await driver.get(url);
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await driver.sleep(3000); // Wait longer for page to fully load in headless mode
 
     // Try to close any pop-up alert (like cookie rejection)
     try {
@@ -159,8 +180,6 @@ class LinkedinScraper {
             link: `https://www.linkedin.com/jobs/view/${jobId}`
           };
 
-          console.log(job);
-
           const containsMatch = includes.some(term => jobTitle.toLowerCase().includes(term.toLowerCase()));
           const notExcluded = excludes.every(term => !jobTitle.toLowerCase().includes(term.toLowerCase()));
 
@@ -170,14 +189,41 @@ class LinkedinScraper {
             await driver.wait(until.elementIsVisible(jobDetailElement), 5000);
 
             const tvmTextElements = await jobDetailElement.findElements(By.className("tvm__text"));
-            // The original code took the third element (index 2)
-            if (tvmTextElements[2]) {
-              const dateText = await tvmTextElements[2].getText();
-              job.date = dateText;
+
+            // Look for element that has "ago" in text instead of using fixed index
+            let dateText = '';
+            for (const element of tvmTextElements) {
+              const text = await element.getText();
+              if (text.includes('ago')) {
+                dateText = text;
+                break;
+              }
             }
-            await this.googleSheet.addToSheetIfNeeded(job, "LinkedIn");
-            this.logger.logLinkedInJob();
+            job.date = dateText;
+
+            console.log(job);
+
+            const dayKeywords = ['min', 'hour', '1 day'];
+            const weekKeywords = [...dayKeywords, 'day', '1 week'];
+
+            const containsKeyword = (text, keywords) =>
+              keywords.some(keyword => text.toLowerCase().includes(keyword));
+
+            if (this.config.search.date === "DAY" && containsKeyword(job.date, dayKeywords)) {
+              await this.googleSheet.addToSheetIfNeeded(job, "LinkedIn");
+              this.logger.logLinkedInJob();
+            } else if (this.config.search.date === "WEEK" && containsKeyword(job.date, weekKeywords)) {
+              await this.googleSheet.addToSheetIfNeeded(job, "LinkedIn");
+              this.logger.logLinkedInJob();
+            } else if (job.date == '') {
+              await this.googleSheet.addToSheetIfNeeded(job, "LinkedIn");
+              this.logger.logLinkedInJob();
+            } else {
+              console.log("⏭️ Outdated job");
+              this.logger.logScanLinkedInJob();
+            }
           } else {
+            console.log(job);
             console.log("⏭️ Not matched");
             this.logger.logScanLinkedInJob();
           }
@@ -190,7 +236,7 @@ class LinkedinScraper {
         // Scroll down to load more jobs
         const { height } = (await li.getRect());
         await driver.executeScript(`arguments[0].scrollBy(0, ${height});`, scrollable);
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await driver.sleep(200);
       }
 
       // Try to go to next page
@@ -198,6 +244,7 @@ class LinkedinScraper {
         page += 1;
         const nextPageButton = await driver.findElement(By.css(`button[aria-label="Page ${page}"]`));
         await nextPageButton.click();
+        await driver.sleep(2000);
       } catch (err) {
         hasNextPage = false;
       }
