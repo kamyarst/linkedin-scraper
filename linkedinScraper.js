@@ -23,17 +23,17 @@ class LinkedinScraper {
     options.addArguments('--disable-gpu'); // Disable GPU acceleration
     options.addArguments('--remote-debugging-port=9222'); // Enable remote debugging
     options.addArguments('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'); // Set consistent user agent
-    
+
     // Additional options to better mimic real browser behavior
     options.addArguments('--window-size=1920,1080');
     options.addArguments('--start-maximized');
     options.addArguments('--disable-extensions');
     options.addArguments('--lang=en-US,en;q=0.9');
     options.addArguments('--disable-web-security');
-    
+
     // Set CDP chrome properties to bypass detection
     options.addArguments("--disable-features=IsolateOrigins,site-per-process");
-    
+
     // Set additional preferences
     options.setUserPreferences({
       'credentials_enable_service': false,
@@ -47,10 +47,10 @@ class LinkedinScraper {
     options.setUserPreferences({ 'useAutomationExtension': false });
 
     const driver = await new Builder().forBrowser('chrome').setChromeOptions(options).build();
-    
+
     // Override navigator.webdriver property to avoid detection
     await driver.executeScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
-    
+
     await driver.manage().window().maximize();
     return driver;
   }
@@ -133,6 +133,8 @@ class LinkedinScraper {
   }
 
   async fetchData(query, includes, excludes, driver) {
+    await this.closeWindow(driver);
+
     const dateParam = await this.getDate(this.config.search.date);
     const location = encodeURIComponent(this.config.search.location);
     const keywords = encodeURIComponent(query);
@@ -278,6 +280,15 @@ class LinkedinScraper {
     } else {
       return ""
     }
+  }
+
+  async closeWindow(driver) {
+    const handles = await driver.getAllWindowHandles();
+    for (let i = 1; i < handles.length; i++) {
+      await driver.switchTo().window(handles[i]);
+      await driver.close();
+    }
+    await driver.switchTo().window(handles[0]);
   }
 }
 
