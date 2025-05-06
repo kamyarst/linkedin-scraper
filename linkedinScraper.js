@@ -7,11 +7,12 @@ class LinkedinScraper {
   constructor(config, googleSheet, logger) {
     this.config = config;
     this.googleSheet = googleSheet;
-    this.logger = logger
+    this.logger = logger;
   }
 
   async initDriver() {
     const options = new chrome.Options();
+    // Memory optimization options
     options.addArguments('--disable-cache');
     options.addArguments('--disable-software-rasterizer');
     options.addArguments('--disk-cache-size=0');
@@ -34,12 +35,21 @@ class LinkedinScraper {
     // Set CDP chrome properties to bypass detection
     options.addArguments("--disable-features=IsolateOrigins,site-per-process");
 
+    // Memory optimization additions
+    // options.addArguments('--js-flags=--max-old-space-size=500'); // Limit JS heap size
+    // options.addArguments('--single-process'); // Use single process to reduce memory footprint
+    options.addArguments('--aggressive-cache-discard'); // Aggressively free memory when possible
+    options.addArguments('--disable-pinch');
+    options.addArguments('--disable-component-extensions-with-background-pages');
+
     // Set additional preferences
     options.setUserPreferences({
       'credentials_enable_service': false,
       'profile.password_manager_enabled': false,
       'useAutomationExtension': false,
-      'plugins.always_open_pdf_externally': true
+      'plugins.always_open_pdf_externally': true,
+      // 'profile.default_content_setting_values.images': 2, // Don't load images to save memory
+      // 'profile.managed_default_content_settings.images': 2
     });
 
     // Remove WebDriver-specific identifiers
@@ -56,7 +66,7 @@ class LinkedinScraper {
   }
 
   async login() {
-    const driver = await this.initDriver();
+    let driver = await this.initDriver();
 
     try {
       if (await this.isValidSession(driver) == false) {
@@ -80,7 +90,27 @@ class LinkedinScraper {
         }
       }
     } finally {
+      if (driver) {
+        await this.releaseDriver(driver);
+        driver = null;
+      }
+    }
+  }
+
+  async releaseDriver(driver) {
+    try {
+      // Clear browser cache and session storage before quitting
+      // await driver.executeScript('window.localStorage.clear();');
+      // await driver.executeScript('window.sessionStorage.clear();');
+      // await driver.executeScript('var cookies = document.cookie.split(";"); for (var i = 0; i < cookies.length; i++) { var cookie = cookies[i]; var eqPos = cookie.indexOf("="); var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie; document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT"; }');
+      
+      // Close all open windows except the main one
+      await this.closeWindow(driver);
+      
+      // Quit the driver
       await driver.quit();
+    } catch (error) {
+      console.error('Error releasing driver resources:', error);
     }
   }
 
@@ -112,7 +142,7 @@ class LinkedinScraper {
   }
 
   async getJobs() {
-    const driver = await this.initDriver();
+    let driver = await this.initDriver();
     try {
       await this.setSessionCookie(driver);
 
@@ -128,7 +158,10 @@ class LinkedinScraper {
         }
       }
     } finally {
-      await driver.quit();
+      if (driver) {
+        await this.releaseDriver(driver);
+        driver = null;
+      }
     }
   }
 
@@ -156,7 +189,7 @@ class LinkedinScraper {
     let page = 1;
     let hasNextPage = true;
 
-    while (hasNextPage) {
+    while (hasNextPage && page <= this.config.linkedin.page_limit) {
       const jobsTable = await driver.findElement(By.className('scaffold-layout__list'));
       await driver.wait(until.elementIsVisible(jobsTable), 5000);
       const jobRows = await jobsTable.findElements(By.xpath('//li[@data-occludable-job-id]'));
@@ -205,8 +238,9 @@ class LinkedinScraper {
 
             console.log(job);
 
+            // Cache these keyword arrays to avoid creating new arrays for each job
             const dayKeywords = ['min', 'hour', '1 day'];
-            const weekKeywords = [...dayKeywords, 'day', '1 week'];
+            const weekKeywords = ['min', 'hour', '1 day', 'day', '1 week'];
 
             const containsKeyword = (text, keywords) =>
               keywords.some(keyword => text.toLowerCase().includes(keyword));
@@ -283,12 +317,16 @@ class LinkedinScraper {
   }
 
   async closeWindow(driver) {
-    const handles = await driver.getAllWindowHandles();
-    for (let i = 1; i < handles.length; i++) {
-      await driver.switchTo().window(handles[i]);
-      await driver.close();
+    try {
+      const handles = await driver.getAllWindowHandles();
+      for (let i = 1; i < handles.length; i++) {
+        await driver.switchTo().window(handles[i]);
+        await driver.close();
+      }
+      await driver.switchTo().window(handles[0]);
+    } catch (error) {
+      console.error("Error closing windows:", error);
     }
-    await driver.switchTo().window(handles[0]);
   }
 }
 
